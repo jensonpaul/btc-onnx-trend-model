@@ -1,0 +1,13 @@
+[package]
+name        = "btc-onnx-trend-model"
+version     = "0.1.0"
+edition     = "2021"
+description = "ONNX-backed TrendModelExt for btc_prediction_engine, loaded via tract-onnx (pure Rust, no FFI)"
+license     = "MIT"
+
+[dependencies]
+btc_prediction_engine = { git = "https://github.com/jensonpaul/btc-prediction-engine.git", branch = "0.1.0" }
+
+tract-onnx = "0.21"
+ndarray    = "0.16"
+anyhow     = "1"
