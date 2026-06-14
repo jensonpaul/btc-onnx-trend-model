@@ -92,6 +92,11 @@ impl OnnxTrendModel {
         let plan = tract_onnx::onnx()
             .model_for_path(path)
             .with_context(|| format!("loading ONNX model from {}", path.display()))?
+            .with_input_fact(
+		0,
+		InferenceFact::dt_shape(f32::datum_type(), tvec![1usize, 28usize]),
+	    )
+	    .context("setting input fact")?
             .into_optimized()
             .context("optimizing ONNX model")?
             .into_runnable()
@@ -106,6 +111,11 @@ impl OnnxTrendModel {
         let plan = tract_onnx::onnx()
             .model_for_read(&mut std::io::Cursor::new(bytes))
             .context("loading ONNX model from embedded bytes")?
+            .with_input_fact(
+		0,
+		InferenceFact::dt_shape(f32::datum_type(), tvec![1usize, 28usize]),
+	    )
+	    .context("setting input fact")?
             .into_optimized()
             .context("optimizing ONNX model")?
             .into_runnable()
