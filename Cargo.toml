@@ -6,7 +6,12 @@ description = "ONNX-backed TrendModelExt for btc_prediction_engine, loaded via t
 license     = "MIT"
 
 [dependencies]
-btc_prediction_engine = { git = "https://github.com/jensonpaul/btc-prediction-engine.git", branch = "0.2.0" }
+btc_prediction_engine = { 
+    git = "https://github.com/jensonpaul/btc-prediction-engine.git", 
+    branch = "0.2.0",
+    features = ["feeds-binance", "feeds-bitstamp", "feeds-coinbase", "feeds-kraken"],
+    default-features = false 
+}
 
 tract-onnx = "0.21"
 ndarray    = "0.16"
