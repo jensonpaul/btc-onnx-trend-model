@@ -13,7 +13,7 @@
 //!
 //! | Name                  | Shape    | Dtype | Meaning                  |
 //! |------------------------|----------|-------|--------------------------|
-//! | `float_input` (input)  | `[1,28]` | f32   | normalised feature array |
+//! | `float_input` (input)  | `[1,27]` | f32   | normalised feature array |
 //! | `output_label`         | `[1]`    | i64   | predicted class (0/1/2)  |
 //! | `output_probability`   | `[1,3]`  | f32   | class probabilities      |
 //!
@@ -56,6 +56,9 @@
 //! 27  zreturn_300s     -- return_300s / vol_1800s
 //! ```
 
+pub mod hot_reload;
+pub use hot_reload::{HotReloadOnnxTrendModel, PerScaleHotReloadOnnxTrendModel, WatchGuard};
+
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -68,7 +71,7 @@ use btc_prediction_engine::types::{TimeScale, TrendDirection, TrendSignal};
 
 /// Number of input features. Must match the column count produced by
 /// `btc-model-trainer` and `feature_array()` below, in the same order.
-const N_FEATURES: usize = 28;
+const N_FEATURES: usize = 27;
 
 type OnnxPlan = SimplePlan<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>;
 
@@ -94,7 +97,7 @@ impl OnnxTrendModel {
             .with_context(|| format!("loading ONNX model from {}", path.display()))?
             .with_input_fact(
 		0,
-		InferenceFact::dt_shape(f32::datum_type(), tvec![1usize, 28usize]),
+		InferenceFact::dt_shape(f32::datum_type(), tvec![1usize, 27usize]),
 	    )
 	    .context("setting input fact")?
             .into_optimized()
@@ -113,7 +116,7 @@ impl OnnxTrendModel {
             .context("loading ONNX model from embedded bytes")?
             .with_input_fact(
 		0,
-		InferenceFact::dt_shape(f32::datum_type(), tvec![1usize, 28usize]),
+		InferenceFact::dt_shape(f32::datum_type(), tvec![1usize, 27usize]),
 	    )
 	    .context("setting input fact")?
             .into_optimized()
@@ -188,9 +191,6 @@ impl OnnxTrendModel {
             // z-scored returns -- primary cross-regime generalisation signal.
             f.zreturn_30s.unwrap_or(0.0)  as f32,   // 26
             f.zreturn_300s.unwrap_or(0.0) as f32,   // 27
-
-            // Padding slot reserved for future use (always 0.0 until assigned).
-            0.0_f32,                                  // 28
         ]
     }
 
@@ -214,30 +214,28 @@ impl OnnxTrendModel {
             Err(_) => return (TrendDirection::Sideways, 0.0),
         };
 
-        let label = match outputs.get(0).and_then(|t| t.to_array_view::<i64>().ok()) {
-            Some(view) => match view.get(0) {
-                Some(v) => *v,
-                None => return (TrendDirection::Sideways, 0.0),
-            },
+        // Derive label from probabilities via argmax — avoids the TDim type
+        // mismatch on output[0] that tract produces for this model export.
+        let probs = match outputs
+            .get(1)
+            .and_then(|t| t.to_array_view::<f32>().ok())
+        {
+            Some(p) => p,
             None => return (TrendDirection::Sideways, 0.0),
         };
 
-        let confidence = outputs
-            .get(1)
-            .and_then(|t| t.to_array_view::<f32>().ok())
-            .and_then(|probs| probs.get([0, label as usize]).copied())
-            .map(|p| p as f64)
-            .unwrap_or(0.0)
-            .clamp(0.0, 1.0);
+        let (label, confidence) = (0..3usize)
+            .filter_map(|i| probs.get([0, i]).map(|&p| (i, p)))
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .unwrap_or((1, 0.0));
 
         let direction = match label {
             0 => TrendDirection::Bearish,
             2 => TrendDirection::Bullish,
-            // 1 (Sideways) and any unexpected label both map to Sideways.
             _ => TrendDirection::Sideways,
         };
 
-        (direction, confidence)
+        (direction, (confidence as f64).clamp(0.0, 1.0))
     }
 }
 

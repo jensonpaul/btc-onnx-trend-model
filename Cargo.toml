@@ -11,3 +11,6 @@ btc_prediction_engine = { git = "https://github.com/jensonpaul/btc-prediction-en
 tract-onnx = "0.21"
 ndarray    = "0.16"
 anyhow     = "1"
+arc-swap   = "1"
+notify     = { version = "7", features = ["macos_fsevent"] }
+tracing    = "0.1"
